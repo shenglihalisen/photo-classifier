@@ -94,7 +94,7 @@ PROTECTED_PATHS = {
 }
 
 # 请求频率限制：每 IP 每分钟最大请求数
-RATE_LIMIT_MAX_REQUESTS = 30
+RATE_LIMIT_MAX_REQUESTS = 60
 RATE_LIMIT_WINDOW = 60  # 秒
 
 # CSRF Token 使用的密钥（生产环境应从环境变量读取）
@@ -691,7 +691,6 @@ def create_app() -> Flask:
     # ========================================================
 
     @app.route("/api/health", methods=["GET"])
-    @rate_limit
     def health_check():
         """
         健康检查接口
@@ -860,7 +859,6 @@ def create_app() -> Flask:
     # ========================================================
 
     @app.route("/api/status", methods=["GET"])
-    @rate_limit
     def status():
         """获取扫描进度"""
         response = {
