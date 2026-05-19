@@ -103,9 +103,8 @@ class CorruptedDetector(BaseDetector):
             b'II*\x00': "TIFF (小端)",
             b'MM\x00*': "TIFF (大端)",
             b'RIFF': "WebP",
-            b'ftypheic': "HEIC",
-            b'ftypmif1': "HEIF",
-            b'ftypisom': "HEIF",
+            b'\x00\x00\x00\x1cftypheic': "HEIC",
+            b'\x00\x00\x00\x20ftypisom': "HEIF",
         }
 
         try:
