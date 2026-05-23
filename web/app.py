@@ -91,9 +91,17 @@ FILE_MAGIC_NUMBERS = {
 PROTECTED_PATHS = {
     '/', '/etc', '/usr', '/bin', '/sbin', '/boot', '/dev', '/proc', '/sys',
     '/var', '/tmp', '/root', '/home', '/windows', '/windows/system32',
-    'C:\\\\', 'C:\\\\Windows', 'C:\\\\Program Files', 'C:\\\\ProgramData',
-    'D:\\\\Windows', 'D:\\\\Program Files',
 }
+# 动态检测系统盘保护路径
+_sys_root = os.environ.get('SystemRoot', 'C:\\Windows')
+_sys_drive = os.path.splitdrive(_sys_root)[0] + '\\'
+PROTECTED_PATHS.update({
+    _sys_drive,
+    _sys_root,
+    os.path.join(_sys_drive, 'Program Files'),
+    os.path.join(_sys_drive, 'Program Files (x86)'),
+    os.path.join(_sys_drive, 'ProgramData'),
+})
 
 # 请求频率限制：每 IP 每分钟最大请求数
 RATE_LIMIT_MAX_REQUESTS = 60
@@ -220,10 +228,10 @@ def sanitize_error_message(error: Exception) -> str:
         脱敏后的错误信息
     """
     msg = str(error)
-    # 移除绝对路径信息（Windows 盘符路径）
-    msg = re.sub(r'[A-Za-z]:\\[^\s:]+', '[路径已隐藏]', msg)
-    # 移除 Unix 绝对路径（以 / 开头且包含目录分隔符的路径）
-    msg = re.sub(r'/[^\s:/]+(?:/[^\s:]+)*', '[路径已隐藏]', msg)
+    # 移除绝对路径信息（Windows 盘符路径，含反斜杠和正斜杠）
+    msg = re.sub(r'[A-Za-z]:[\\/][^\s:]+', '[路径已隐藏]', msg)
+    # 移除 Unix 绝对路径（以 / 开头的路径段）
+    msg = re.sub(r'(?<![A-Za-z]:)/(?:[^\s:/\\]+[/\\])+[^\s:/\\]*', '/[路径已隐藏]', msg)
     # 移除可能的用户名
     msg = re.sub(r'Users\\[^\\]+(?=\\)', '[用户]', msg)
     msg = re.sub(r'/home/[^/]+(?=/)', '/[用户]', msg)
@@ -421,14 +429,14 @@ class TempFileCleaner:
                  max_age: int = TEMP_FILE_MAX_AGE):
         self.interval = interval
         self.max_age = max_age
-        self._running = False
+        self._stop_event = threading.Event()
         self._thread = None
 
     def start(self):
         """启动后台清理线程"""
-        if self._running:
+        if self._thread and self._thread.is_alive():
             return
-        self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._cleanup_loop, daemon=True)
         self._thread.start()
         logger.info("临时文件清理器已启动，清理间隔=%d秒，最大保留=%d秒",
@@ -436,12 +444,11 @@ class TempFileCleaner:
 
     def stop(self):
         """停止清理线程"""
-        self._running = False
+        self._stop_event.set()
 
     def _cleanup_loop(self):
         """清理循环"""
-        while self._running:
-            time.sleep(self.interval)
+        while not self._stop_event.wait(self.interval):
             self._cleanup()
 
     def _cleanup(self):
@@ -723,6 +730,17 @@ def create_app(_test_scan_state=None) -> Flask:
         返回:
             新生成的 CSRF Token
         """
+        # 防御性 Referer 检查（防御跨站请求）
+        referer = request.headers.get("Referer", "")
+        if referer:
+            allowed_hosts = request.host
+            from urllib.parse import urlparse
+            try:
+                ref_netloc = urlparse(referer).netloc
+                if ref_netloc and ref_netloc != allowed_hosts:
+                    return jsonify({"error": "来源校验失败"}), 403
+            except Exception:
+                pass
         token = generate_csrf_token()
         return jsonify({"csrf_token": token})
 
@@ -986,6 +1004,14 @@ def create_app(_test_scan_state=None) -> Flask:
 
         if not scan_state["results"] or file_path not in scan_state["results"]:
             return jsonify({"error": "文件不在扫描结果中"}), 400
+
+        if not is_path_safe(file_path):
+            logger.warning("移除废片跳过不安全路径: %s", file_path)
+            return jsonify({"error": "不允许操作该路径"}), 403
+
+        if os.path.islink(file_path):
+            logger.warning("移除废片跳过符号链接: %s", file_path)
+            return jsonify({"error": "不允许操作符号链接"}), 403
 
         scan_state["removed_paths"].add(file_path)
         logger.info("手动移除废片标记: %s", sanitize_error_message(file_path))

@@ -50,18 +50,19 @@ APP_NAME = "照片自动分类工具"
 APP_VERSION = "v2.0.0"
 APP_AUTHOR = "PhotoClassifier Team"
 
-# 禁止访问的系统目录
-FORBIDDEN_PATHS = [
-    os.path.normpath("C:\\Windows"),
-    os.path.normpath("C:\\Program Files"),
-    os.path.normpath("C:\\Program Files (x86)"),
-    os.path.normpath("C:\\System32"),
-    "/etc",
-    "/usr",
-    "/bin",
-    "/sbin",
-    "/System",
-]
+# 禁止访问的系统目录（动态检测系统盘符）
+_forbidden = []
+_sys_root = os.environ.get('SystemRoot', 'C:\\Windows')
+_sys_drive = os.path.splitdrive(_sys_root)[0]
+if _sys_drive:
+    _forbidden.extend([
+        os.path.normpath(f"{_sys_drive}\\Windows"),
+        os.path.normpath(f"{_sys_drive}\\Program Files"),
+        os.path.normpath(f"{_sys_drive}\\Program Files (x86)"),
+        os.path.normpath(f"{_sys_drive}\\System32"),
+    ])
+_forbidden.extend(["/etc", "/usr", "/bin", "/sbin", "/System"])
+FORBIDDEN_PATHS = _forbidden
 
 # 缺陷类型中文映射
 DEFECT_TYPE_NAMES = {
@@ -1251,7 +1252,7 @@ class DesktopApp(QMainWindow):
 
         try:
             if sys.platform == "win32":
-                subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
+                subprocess.Popen(['explorer', '/select,', os.path.normpath(path)])
             elif sys.platform == "darwin":
                 subprocess.Popen(["open", "-R", path])
             else:

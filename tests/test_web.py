@@ -24,7 +24,9 @@ def scan_state():
     path = os.path.join(tempfile.gettempdir(), f"test_photo_{uuid.uuid4().hex[:8]}.jpg")
     with open(path, "w") as f:
         f.write("fake")
-    return {
+    from tests.helpers import _register
+    _register(path)
+    yield {
         "is_scanning": False,
         "progress": 1,
         "total": 1,

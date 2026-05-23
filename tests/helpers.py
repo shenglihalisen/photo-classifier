@@ -2,6 +2,23 @@ import os, sys, tempfile, struct, numpy as np
 import cv2
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 注册所有临时文件路径，供 conftest 自动清理
+_created_temp_files: set[str] = set()
+
+
+def _register(path: str) -> str:
+    _created_temp_files.add(path)
+    return path
+
+
+def cleanup_temp_files():
+    for p in list(_created_temp_files):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+        _created_temp_files.discard(p)
+
 
 def make_test_image(width=100, height=80, color=(128, 128, 128), fmt='jpg'):
     import cv2
@@ -13,7 +30,7 @@ def make_test_image(width=100, height=80, color=(128, 128, 128), fmt='jpg'):
         cv2.imwrite(path, img, [cv2.IMWRITE_JPEG_QUALITY, 95])
     else:
         cv2.imwrite(path, img)
-    return path
+    return _register(path)
 
 
 def make_blank_image(width=100, height=80, fmt='jpg'):
@@ -24,13 +41,13 @@ def make_corrupted_file():
     fd, path = tempfile.mkstemp(suffix='.jpg')
     os.write(fd, b'\x00\x00\x00\x00\x00\x00\x00\x00')
     os.close(fd)
-    return path
+    return _register(path)
 
 
 def make_empty_file():
     fd, path = tempfile.mkstemp(suffix='.jpg')
     os.close(fd)
-    return path
+    return _register(path)
 
 
 def make_blurry_image():
@@ -40,7 +57,7 @@ def make_blurry_image():
     fd, path = tempfile.mkstemp(suffix='.jpg')
     os.close(fd)
     cv2.imwrite(path, img, [cv2.IMWRITE_JPEG_QUALITY, 10])
-    return path
+    return _register(path)
 
 
 def make_sharp_image():
@@ -51,7 +68,7 @@ def make_sharp_image():
     fd, path = tempfile.mkstemp(suffix='.jpg')
     os.close(fd)
     cv2.imwrite(path, img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-    return path
+    return _register(path)
 
 
 def make_face_image():
@@ -64,4 +81,4 @@ def make_face_image():
     fd, path = tempfile.mkstemp(suffix='.jpg')
     os.close(fd)
     cv2.imwrite(path, img)
-    return path
+    return _register(path)

@@ -84,13 +84,14 @@ class PhotoClassifier:
         results = {}
 
         for i, image_path in enumerate(image_paths):
-            # 回调进度
-            if callback:
-                callback(i + 1, total, image_path)
-
-            # 执行分类
-            detection_results = self.classify(image_path)
-            results[image_path] = detection_results
+            try:
+                # 执行分类
+                detection_results = self.classify(image_path)
+                results[image_path] = detection_results
+            finally:
+                # 回调进度（无论是否异常都执行，确保进度不卡死）
+                if callback:
+                    callback(i + 1, total, image_path)
 
         return results
 

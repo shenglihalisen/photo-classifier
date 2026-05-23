@@ -5,6 +5,7 @@
 """
 
 import os
+import threading
 import cv2
 import numpy as np
 
@@ -32,6 +33,7 @@ class ObstructionDetector(BaseDetector):
 
     def __init__(self):
         self._face_landmarker = None
+        self._init_lock = threading.Lock()
 
     @property
     def defect_type(self) -> DefectType:
@@ -39,19 +41,22 @@ class ObstructionDetector(BaseDetector):
 
     def _get_face_landmarker(self):
         if self._face_landmarker is None:
-            from mediapipe.tasks import python
-            from mediapipe.tasks.python import vision
-            model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
-            with open(model_path, "rb") as f:
-                model_data = f.read()
-            self._face_landmarker = vision.FaceLandmarker.create_from_options(
-                vision.FaceLandmarkerOptions(
-                    base_options=python.BaseOptions(model_asset_buffer=model_data),
-                    running_mode=vision.RunningMode.IMAGE,
-                    num_faces=5,
-                    min_face_detection_confidence=0.5,
+            with self._init_lock:
+                if self._face_landmarker is not None:
+                    return self._face_landmarker
+                from mediapipe.tasks import python
+                from mediapipe.tasks.python import vision
+                model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
+                with open(model_path, "rb") as f:
+                    model_data = f.read()
+                self._face_landmarker = vision.FaceLandmarker.create_from_options(
+                    vision.FaceLandmarkerOptions(
+                        base_options=python.BaseOptions(model_asset_buffer=model_data),
+                        running_mode=vision.RunningMode.IMAGE,
+                        num_faces=5,
+                        min_face_detection_confidence=0.5,
+                    )
                 )
-            )
         return self._face_landmarker
 
     def detect(self, image_path: str) -> DetectionResult:
